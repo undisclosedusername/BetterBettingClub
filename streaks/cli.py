@@ -72,6 +72,8 @@ def print_result(result: dict) -> None:
 
 
 def main(argv=None) -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     a = parse_args(argv)
     league = LEAGUES[a.league]
     if a.list_stats:

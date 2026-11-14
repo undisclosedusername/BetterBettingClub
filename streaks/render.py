@@ -104,7 +104,7 @@ def write_cards(cards: list[tuple[str, str]], out_dir: Path, png: bool = True) -
     written = []
     for slug, doc in cards:
         p = out_dir / f"{slug}.html"
-        p.write_text(doc)
+        p.write_text(doc, encoding="utf-8")
         written.append(p)
     if png:
         try:
