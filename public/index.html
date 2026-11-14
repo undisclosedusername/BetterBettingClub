@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prop Streaks</title>
+<meta name="description" content="100% player-prop streaks for tonight's NBA and this week's NFL slate, with preferable matchups highlighted.">
+<style>
+:root{
+  --bg:#0f0e12; --panel:#1a181e; --line:rgba(255,255,255,.14); --text:#f4f1f6; --muted:#aaa3b0;
+  --gold:#f5c542; --gold-soft:rgba(245,197,66,.14); --accent:#7a1f35;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:Inter,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;min-height:100vh}
+.hero{background:linear-gradient(180deg,var(--accent),transparent 420px);transition:background .4s}
+.wrap{max-width:860px;margin:0 auto;padding:28px 16px 64px}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.leagues{display:flex;gap:6px;background:rgba(0,0,0,.3);padding:4px;border-radius:12px}
+.leagues button{all:unset;cursor:pointer;padding:8px 18px;border-radius:9px;font-weight:800;letter-spacing:1.5px}
+.leagues button[aria-pressed=true]{background:#fff;color:#111}
+.updated{color:var(--muted);font-size:13px}
+h1{font-size:clamp(30px,6vw,48px);font-weight:750;margin:28px 0 4px;letter-spacing:.3px}
+.date{color:#e2dde6;font-size:clamp(17px,3vw,22px)}
+.stats{display:flex;gap:8px;overflow-x:auto;padding:22px 0 10px;scrollbar-width:none}
+.stats::-webkit-scrollbar{display:none}
+.stats button{all:unset;cursor:pointer;white-space:nowrap;padding:7px 14px;border-radius:999px;
+  border:1px solid var(--line);color:#ddd6e2;font-size:14px;font-weight:600}
+.stats button[aria-pressed=true]{background:var(--text);color:#111;border-color:transparent}
+.stats button .n{opacity:.6;margin-left:6px;font-variant-numeric:tabular-nums}
+.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:6px 0 16px;
+  color:var(--muted);font-size:14px;flex-wrap:wrap}
+.toggle{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.toggle input{accent-color:var(--gold);width:16px;height:16px}
+.legend b{color:var(--gold)}
+.rows{display:flex;flex-direction:column;gap:12px}
+.row{display:flex;align-items:stretch;border-radius:12px;overflow:hidden;border:1px solid var(--line);
+  background:linear-gradient(90deg,rgba(var(--rgb),.45),var(--panel) 65%)}
+.row.pref{border:2px solid var(--gold);box-shadow:0 0 18px rgba(245,197,66,.25)}
+.logo{width:76px;flex:none;display:flex;align-items:center;justify-content:center}
+.logo img{width:56px;height:56px;object-fit:contain}
+.logo span{font-weight:800}
+.body{flex:1;min-width:0;padding:12px 14px;display:flex;flex-direction:column;gap:6px;justify-content:center}
+.name{font-size:clamp(16px,3.4vw,20px);font-weight:650}
+.star{color:var(--gold);margin-right:4px}
+.meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:#cfc8d4}
+.chip{background:var(--gold-soft);color:#f8d675;border:1px solid rgba(245,197,66,.5);border-radius:999px;padding:1px 9px;font-weight:600}
+.right{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:6px;padding:10px 14px}
+.games{font-size:clamp(16px,3.4vw,20px);font-variant-numeric:tabular-nums;white-space:nowrap}
+.near .games{color:#cfc8d4}
+.spark{display:flex;gap:2px;align-items:flex-end;height:22px}
+.spark i{display:block;width:5px;border-radius:1px;background:#6fcf97}
+.spark i.miss{background:#eb5757}
+.empty{padding:40px 16px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:12px}
+footer{margin-top:28px;color:var(--muted);font-size:12px;line-height:1.6}
+@media (max-width:520px){.logo{width:56px}.logo img{width:42px;height:42px}.spark{display:none}}
+</style>
+</head>
+<body>
+<div class="hero" id="hero"><div class="wrap">
+  <header>
+    <div class="leagues" role="group" aria-label="League">
+      <button data-league="nba" aria-pressed="true">NBA</button>
+      <button data-league="nfl" aria-pressed="false">NFL</button>
+    </div>
+    <div class="updated" id="updated"></div>
+  </header>
+  <h1 id="title">100% Streaks</h1>
+  <div class="date" id="date"></div>
+  <nav class="stats" id="stats" aria-label="Stat"></nav>
+  <div class="toolbar">
+    <label class="toggle"><input type="checkbox" id="prefOnly"> Preferable matchups only</label>
+    <span class="legend"><b>★</b> soft defense, weaker opponent, or player in form</span>
+  </div>
+  <main class="rows" id="rows"></main>
+  <footer>Streaks count consecutive recent games played at or above the line (one-miss runs shown as e.g. 10/11).
+    Bars show the last 10 games, newest on the right. Data: ESPN box scores. Not betting advice.</footer>
+</div></div>
+<script>
+const state = { league: "nba", stat: null, prefOnly: false, data: {} };
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const rgb = h => { h = (h || "333333").replace("#", ""); if (h.length !== 6) h = "333333";
+  return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)).join(","); };
+
+try { Object.assign(state, JSON.parse(localStorage.getItem("streaks-ui") || "{}"), { data: {} }); } catch {}
+const save = () => { try { localStorage.setItem("streaks-ui",
+  JSON.stringify({ league: state.league, stat: state.stat, prefOnly: state.prefOnly })); } catch {} };
+
+async function load(league) {
+  if (state.data[league]) return state.data[league];
+  const r = await fetch(`data/${league}.json`, { cache: "no-cache" });
+  if (!r.ok) throw new Error(`No data for ${league.toUpperCase()} yet`);
+  return (state.data[league] = await r.json());
+}
+
+function dateLabel(d) {
+  const ds = (d.slate_dates?.length ? d.slate_dates : [d.date]).map(s => new Date(s + "T12:00:00"));
+  const a = ds[0], b = ds[ds.length - 1];
+  const long = { weekday: "long", month: "long", day: "numeric" }, short = { month: "short", day: "numeric" };
+  return a.getTime() === b.getTime() ? a.toLocaleDateString(undefined, long)
+    : `${a.toLocaleDateString(undefined, short)} – ${b.toLocaleDateString(undefined, short)}`;
+}
+
+function spark(r) {
+  const vals = (r.recent || []).slice(0, 10).reverse();
+  if (!vals.length) return "";
+  const max = Math.max(...vals, r.threshold) || 1;
+  return `<div class="spark" title="Last ${vals.length}: ${vals.join(", ")}">` + vals.map(v =>
+    `<i class="${v >= r.threshold ? "" : "miss"}" style="height:${Math.max(3, v / max * 22)}px"></i>`).join("") + "</div>";
+}
+
+function render() {
+  for (const b of document.querySelectorAll(".leagues button")) b.setAttribute("aria-pressed", b.dataset.league === state.league);
+  $("prefOnly").checked = state.prefOnly;
+  const d = state.data[state.league];
+  if (!d) return;
+  const cards = d.stats || [];
+  if (!cards.some(c => c.key === state.stat)) state.stat = cards[0]?.key ?? null;
+  const card = cards.find(c => c.key === state.stat);
+  const team = id => d.teams[id] || { abbr: "", logo: "", color: "333333" };
+
+  $("stats").innerHTML = cards.map(c => {
+    const n = c.rows.filter(r => r.preferable).length;
+    return `<button data-stat="${esc(c.key)}" aria-pressed="${c.key === state.stat}">${esc(c.title)}${n ? `<span class="n">★${n}</span>` : ""}</button>`;
+  }).join("");
+  $("title").textContent = card ? `100% ${card.title} Streaks` : `${d.league_name} Streaks`;
+  $("date").textContent = dateLabel(d);
+  $("updated").textContent = "Updated " + new Date(d.generated_at).toLocaleString(undefined, { hour: "numeric", minute: "2-digit", month: "short", day: "numeric" });
+
+  let rows = card ? card.rows : [];
+  if (state.prefOnly) rows = rows.filter(r => r.preferable);
+  $("hero").style.setProperty("--accent", "#" + (rows[0] ? team(rows[0].team).color : "5a1a2a"));
+
+  if (!cards.length) { $("rows").innerHTML = `<div class="empty">No upcoming ${esc(d.league_name)} games on this slate.</div>`; return; }
+  if (!rows.length) { $("rows").innerHTML = `<div class="empty">No ${state.prefOnly ? "preferable " : ""}streaks for this stat.</div>`; return; }
+
+  $("rows").innerHTML = rows.map(r => {
+    const t = team(r.team), opp = r.opponent ? team(r.opponent) : null;
+    const logo = t.logo ? `<img src="${esc(t.logo)}" alt="${esc(t.abbr)}" loading="lazy">` : `<span>${esc(t.abbr)}</span>`;
+    const meta = [opp ? `${r.home ? "vs" : "@"} ${esc(opp.abbr)}` : "",
+      ...r.flags.map(f => `<span class="chip">${esc(f.text)}</span>`)].filter(Boolean).join("");
+    return `<article class="row${r.perfect ? "" : " near"}${r.preferable ? " pref" : ""}" style="--rgb:${rgb(t.color)}">
+      <div class="logo" style="background:#${esc(t.color)}">${logo}</div>
+      <div class="body"><div class="name">${r.preferable ? '<span class="star">★</span>' : ""}${esc(r.player.short)} : ${esc(r.threshold_label)} ${esc(card.label)}</div>
+        ${meta ? `<div class="meta">${meta}</div>` : ""}</div>
+      <div class="right"><div class="games">${r.hits}/${r.games} Games</div>${spark(r)}</div></article>`;
+  }).join("");
+}
+
+async function show(league) {
+  state.league = league; save(); render();
+  try { await load(league); }
+  catch (e) { $("rows").innerHTML = `<div class="empty">${esc(e.message)}</div>`; $("stats").innerHTML = ""; return; }
+  if (state.league === league) render();
+}
+
+document.querySelector(".leagues").addEventListener("click", e => {
+  const b = e.target.closest("button[data-league]"); if (b) { state.stat = null; show(b.dataset.league); }
+});
+$("stats").addEventListener("click", e => {
+  const b = e.target.closest("button[data-stat]"); if (b) { state.stat = b.dataset.stat; save(); render(); }
+});
+$("prefOnly").addEventListener("change", e => { state.prefOnly = e.target.checked; save(); render(); });
+setInterval(() => { delete state.data[state.league]; show(state.league); }, 5 * 60 * 1000);
+show(state.league);
+</script>
+</body>
+</html>

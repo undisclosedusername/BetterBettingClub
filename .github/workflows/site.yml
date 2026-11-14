@@ -1,0 +1,68 @@
+# Builds the streak data and publishes public/ to GitHub Pages.
+# One-time setup: repo Settings -> Pages -> Source: "GitHub Actions".
+name: site
+
+on:
+  schedule:
+    - cron: "7,37 13-23 * * *"   # every 30 min, 9am-7pm ET (UTC-4/5)
+    - cron: "7 0-5 * * *"        # hourly through late games
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: write     # keep-alive step below
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests pytest
+      - run: python -m pytest -q
+
+      # .cache: completed box scores (never change) -> each run downloads only new games.
+      # public/data: last published JSON, so a failed ESPN fetch keeps the previous
+      # good data and the date archive carries over between runs.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .cache
+            public/data
+          key: streaks-${{ github.run_id }}
+          restore-keys: streaks-
+
+      - run: python -m streaks.build --out public/data
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      # GitHub disables scheduled workflows after 60 days without repo activity.
+      # Re-enabling the workflow via the API resets that clock.
+      - name: Keep schedule alive
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/site.yml/enable" || true
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
