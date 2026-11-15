@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 from .config import League, StatDef
 from .engine import Settings, Streak, find_streaks
 from .espn import EspnClient, Slate, Team, load_history, slate as load_slate
-from .matchup import defense_table, evaluate
+from .matchup import defense_table, evaluate, team_event_index
 
 SCHEMA_VERSION = 1
 
@@ -19,6 +19,9 @@ def _team_json(t: Team | None) -> dict | None:
     if not t:
         return None
     return {"id": t.id, "abbr": t.abbr, "name": t.name, "logo": t.logo, "color": t.color}
+
+
+PREFERABLE_MIN_FLAGS = 2  # a single signal (e.g. just "hot") is too common to mean much alone
 
 
 def _row(st: Streak, flags, sl: Slate | None, teams: dict[str, Team]) -> dict:
@@ -35,7 +38,7 @@ def _row(st: Streak, flags, sl: Slate | None, teams: dict[str, Team]) -> dict:
         "hits": st.hits,
         "games": st.games,
         "perfect": st.perfect,
-        "preferable": bool(flags),
+        "preferable": len(flags) >= PREFERABLE_MIN_FLAGS,
         "flags": [{"kind": f.kind, "text": f.text} for f in flags],
         "recent": [st.stat.extract(g.stats) for g in p.games[:10]],  # newest first, for sparklines
     }
@@ -60,10 +63,11 @@ def run(league: League, client: EspnClient, target: date, settings: Settings,
     log(f"  {len(players)} players, {len(team_log)} teams")
 
     team_filter = None if all_teams else sl.team_ids
+    team_index = team_event_index(team_log)
     cards = []
     for stat in stats:
         defense = defense_table(team_log, stat, settings.def_window)
-        scored = [(st, evaluate(st, sl, defense, teams, settings))
+        scored = [(st, evaluate(st, sl, defense, teams, settings, team_index))
                   for st in find_streaks(players, stat, settings, team_filter)]
         if settings.preferable_first:
             # stable sort keeps the streak ranking inside each group

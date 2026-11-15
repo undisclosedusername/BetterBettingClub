@@ -50,10 +50,13 @@ class Settings:
     top: int = 10               # rows per card
     # matchup flags (see matchup.py)
     def_window: int = 15        # opponent's last N games used for "allowed" averages
-    soft_d_pct: float = 0.25    # opponent in the softest X of the league vs this stat
-    hot_ratio: float = 1.20     # last-5 average >= this x the player's earlier average
-    weak_opp_gap: float = 0.20  # opponent win% at least this far below player's team
+    soft_d_pct: float = 0.15    # opponent in the softest X of the league vs this stat
+    soft_d_gap: float = 1.15    # ...and allows at least this x the league-average
+    hot_ratio: float = 1.35     # last-5 average >= this x the player's earlier average
+    weak_opp_gap: float = 0.30  # opponent win% at least this far below player's team
+    weak_opp_cap: float = 0.40  # ...and below this win% outright
     min_record_games: int = 4   # need this many games played before trusting records
+    volume_window: int = 6      # recent games used for the team-share ("volume") check
     preferable_first: bool = True
 
 

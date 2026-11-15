@@ -21,6 +21,11 @@ class StatDef:
     extract: Callable[[Line], float]
     min_line: float = 0      # never report a threshold below this
     min_avg: float = 0       # skip players who average below this
+    # Share of the TEAM's total for this stat the player needs to command
+    # before we call it a "feed one guy the ball" volume edge (see matchup.py).
+    # None means the stat doesn't have a meaningful team-share concept (e.g. a
+    # QB's own passing yards, or defensive counting stats).
+    volume_threshold: float | None = None
 
 
 def _f(*keys: str) -> Callable[[Line], float]:
@@ -29,21 +34,21 @@ def _f(*keys: str) -> Callable[[Line], float]:
 
 NBA_STATS: list[StatDef] = [
     StatDef("pts", "Points", "Points", (5, 8, 10, 12, 15, 18, 20, 22, 25, 28, 30, 35, 40, 45, 50),
-            _f("PTS"), min_line=8, min_avg=6),
+            _f("PTS"), min_line=8, min_avg=6, volume_threshold=0.28),
     StatDef("reb", "Rebounds", "Rebounds", (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20),
-            _f("REB"), min_line=3, min_avg=3),
+            _f("REB"), min_line=3, min_avg=3, volume_threshold=0.30),
     StatDef("ast", "Assists", "Assists", (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16),
-            _f("AST"), min_line=2, min_avg=2),
+            _f("AST"), min_line=2, min_avg=2, volume_threshold=0.32),
     StatDef("3pm", "3PTM", "3PTM", (1, 2, 3, 4, 5, 6, 7, 8),
-            _f("3PM"), min_line=1, min_avg=0.8),
+            _f("3PM"), min_line=1, min_avg=0.8, volume_threshold=0.30),
     StatDef("pra", "Pts+Reb+Ast", "PRA", (10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60),
-            _f("PTS", "REB", "AST"), min_line=15, min_avg=12),
+            _f("PTS", "REB", "AST"), min_line=15, min_avg=12, volume_threshold=0.30),
     StatDef("pr", "Pts+Reb", "Pts + Reb", (10, 15, 20, 25, 30, 35, 40, 45),
-            _f("PTS", "REB"), min_line=12, min_avg=10),
+            _f("PTS", "REB"), min_line=12, min_avg=10, volume_threshold=0.30),
     StatDef("pa", "Pts+Ast", "Pts + Ast", (10, 15, 20, 25, 30, 35, 40, 45),
-            _f("PTS", "AST"), min_line=12, min_avg=10),
+            _f("PTS", "AST"), min_line=12, min_avg=10, volume_threshold=0.30),
     StatDef("ra", "Reb+Ast", "Reb + Ast", (4, 6, 8, 10, 12, 14, 16, 18, 20),
-            _f("REB", "AST"), min_line=5, min_avg=5),
+            _f("REB", "AST"), min_line=5, min_avg=5, volume_threshold=0.30),
     StatDef("stl", "Steals", "Steals", (1, 2, 3, 4), _f("STL"), min_line=1, min_avg=0.9),
     StatDef("blk", "Blocks", "Blocks", (1, 2, 3, 4, 5), _f("BLK"), min_line=1, min_avg=0.9),
 ]
@@ -57,16 +62,16 @@ NFL_STATS: list[StatDef] = [
     StatDef("pass_cmp", "Completions", "Completions", (12, 15, 18, 20, 22, 25, 28, 30, 35),
             _f("passing.CMP"), min_line=15, min_avg=12),
     StatDef("rush_yds", "Rush Yds", "Rushing Yards", (15, 25, 40, 50, 60, 70, 80, 90, 100, 125, 150),
-            _f("rushing.YDS"), min_line=25, min_avg=20),
+            _f("rushing.YDS"), min_line=25, min_avg=20, volume_threshold=0.55),
     StatDef("rush_att", "Rush Att", "Rush Attempts", (5, 8, 10, 12, 15, 18, 20, 22, 25),
-            _f("rushing.CAR"), min_line=8, min_avg=6),
+            _f("rushing.CAR"), min_line=8, min_avg=6, volume_threshold=0.55),
     StatDef("rec_yds", "Rec Yds", "Receiving Yards", (15, 25, 40, 50, 60, 70, 80, 90, 100, 125, 150),
-            _f("receiving.YDS"), min_line=25, min_avg=20),
+            _f("receiving.YDS"), min_line=25, min_avg=20, volume_threshold=0.28),
     StatDef("rec", "Receptions", "Receptions", (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12),
-            _f("receiving.REC"), min_line=2, min_avg=2),
+            _f("receiving.REC"), min_line=2, min_avg=2, volume_threshold=0.24),
     StatDef("rush_rec_yds", "Rush+Rec Yds", "Rush + Rec Yards",
             (25, 40, 50, 60, 75, 90, 100, 125, 150, 175),
-            _f("rushing.YDS", "receiving.YDS"), min_line=40, min_avg=35),
+            _f("rushing.YDS", "receiving.YDS"), min_line=40, min_avg=35, volume_threshold=0.45),
     StatDef("anytime_td", "Anytime TD", "Anytime TD", (1, 2, 3),
             _f("rushing.TD", "receiving.TD"), min_line=1, min_avg=0.3),
     StatDef("int", "Interceptions", "Defensive INT", (1,),

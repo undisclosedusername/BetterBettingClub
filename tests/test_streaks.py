@@ -155,7 +155,7 @@ def test_end_to_end_offline(tmp_path):
 
 from streaks.engine import Streak
 from streaks.espn import Matchup, Slate, Team, TeamGame
-from streaks.matchup import defense_table, evaluate
+from streaks.matchup import defense_table, evaluate, workload_share
 
 
 def _slate(rec_me=(5, 5, 0), rec_opp=(5, 5, 0)):
@@ -185,12 +185,51 @@ def test_tough_defense_no_flag():
     assert evaluate(st, _slate(), defense, TEAMS, Settings()) == []
 
 
+def test_soft_defense_needs_a_meaningful_gap_not_just_rank():
+    # "2" is technically rank 1 (allows the most), but the league is bunched
+    # tightly around ~40 - that's not a clearly-bad defense, just a noisy #1.
+    defense = defense_table(_log({"2": 42, "3": 41, "4": 40, "5": 39}), REB, 15)
+    assert defense["2"].rank == 1
+    st = Streak(mk_player("REB", [8] * 10), REB, 6, 10, 10)
+    assert evaluate(st, _slate(), defense, TEAMS, Settings()) == []
+
+
 def test_weak_opponent_needs_gap_and_losing_record():
     st = Streak(mk_player("REB", [8] * 10), REB, 6, 10, 10)
     assert [f.kind for f in evaluate(st, _slate((8, 2, 0), (3, 7, 0)), {}, TEAMS, Settings())] == ["weak_opp"]
     assert evaluate(st, _slate((8, 2, 0), (6, 4, 0)), {}, TEAMS, Settings()) == []   # opp above .500
     assert evaluate(st, _slate((4, 6, 0), (3, 7, 0)), {}, TEAMS, Settings()) == []   # gap too small
     assert evaluate(st, _slate((2, 0, 0), (0, 2, 0)), {}, TEAMS, Settings()) == []   # too early
+
+
+def _team_index(totals_by_event):
+    return {"1": {eid: TeamGame(eid, date(2026, 11, 1), "2", {"REB": v}, {})
+                  for eid, v in totals_by_event.items()}}
+
+
+def test_workload_share_computes_team_share():
+    player = mk_player("REB", [8] * 10)  # event ids "0".."9", team "1"
+    idx = _team_index({str(i): 20 for i in range(10)})
+    assert workload_share(player, REB, idx, window=6) == 0.4
+
+
+def test_workload_share_ignores_games_missing_from_team_log():
+    player = mk_player("REB", [8] * 10)
+    idx = _team_index({str(i): 20 for i in range(2)})  # only 2 of 10 games indexed
+    assert workload_share(player, REB, idx, window=6) is None  # fewer than 3 usable games
+
+
+def test_volume_flag_fires_on_big_team_share():
+    st = Streak(mk_player("REB", [8] * 10), REB, 6, 10, 10)
+    idx = _team_index({str(i): 20 for i in range(10)})  # 40% share -> above REB's 0.30 threshold
+    flags = evaluate(st, _slate(), {}, TEAMS, Settings(), team_index=idx)
+    assert [f.kind for f in flags] == ["volume"] and "40% of team Rebounds" in flags[0].text
+
+
+def test_volume_flag_skipped_below_threshold():
+    st = Streak(mk_player("REB", [8] * 10), REB, 6, 10, 10)
+    idx = _team_index({str(i): 40 for i in range(10)})  # only 20% share
+    assert evaluate(st, _slate(), {}, TEAMS, Settings(), team_index=idx) == []
 
 
 def test_preferable_rows_sort_first(tmp_path):
