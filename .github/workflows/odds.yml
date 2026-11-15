@@ -1,0 +1,55 @@
+# Fetches sportsbook player-prop lines once a day and attaches them to that day's
+# top streak picks, committing the result back to main (the "site" workflow then
+# redeploys Pages on that push). Kept separate from site.yml's ~30min rebuild
+# cadence on purpose: The Odds API's free tier is 500 credits/month, so this only
+# runs once a day. One-time setup: repo Settings -> Secrets -> Actions ->
+# ODDS_API_KEY (get a free key at https://the-odds-api.com).
+name: odds
+
+on:
+  schedule:
+    - cron: "0 11 * * *"   # ~6-7am ET, before most slates lock in their first lines
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: odds
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests pytest
+      - run: python -m pytest -q
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .cache
+            public/data
+          key: streaks-${{ github.run_id }}
+          restore-keys: streaks-
+
+      - run: python -m streaks.build --out public/data --with-odds --odds-top-n 12
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+
+      - name: Commit odds-enriched data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/data
+          if git diff --staged --quiet; then
+            echo "no data changes"
+          else
+            git commit -m "Daily odds refresh"
+            git push
+          fi

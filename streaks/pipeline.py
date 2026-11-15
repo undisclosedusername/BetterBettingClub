@@ -44,13 +44,14 @@ def _row(st: Streak, flags, sl: Slate | None, teams: dict[str, Team]) -> dict:
 def run(league: League, client: EspnClient, target: date, settings: Settings,
         stats: list[StatDef] | None = None, since: date | None = None,
         lookback_days: int | None = None, slate_days: int | None = None,
-        all_teams: bool = False, progress=None, log=print) -> dict:
+        all_teams: bool = False, progress=None, log=print, want_players: bool = False):
     stats = stats or league.stats
     teams: dict[str, Team] = {}
     sl = load_slate(client, target, slate_days or league.slate_days, teams)
     log(f"{league.name} {target}: {len(sl.events)} upcoming games on the slate")
     if not sl.events and not all_teams:
-        return _result(league, target, sl, teams, [], settings)
+        result = _result(league, target, sl, teams, [], settings)
+        return (result, {}) if want_players else result
 
     start = since or target - timedelta(days=lookback_days or league.default_lookback_days)
     log(f"Loading box scores {start} -> {target - timedelta(days=1)} ...")
@@ -73,7 +74,8 @@ def run(league: League, client: EspnClient, target: date, settings: Settings,
             "defense": {tid: {"allowed": round(d.allowed, 1), "rank": d.rank}
                         for tid, d in defense.items()},
         })
-    return _result(league, target, sl, teams, cards, settings)
+    result = _result(league, target, sl, teams, cards, settings)
+    return (result, players) if want_players else result
 
 
 def _result(league, target, sl, teams, cards, settings) -> dict:

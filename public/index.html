@@ -45,6 +45,23 @@ h1{font-size:clamp(30px,6vw,48px);font-weight:750;margin:28px 0 4px;letter-spaci
 .star{color:var(--gold);margin-right:4px}
 .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:#cfc8d4}
 .chip{background:var(--gold-soft);color:#f8d675;border:1px solid rgba(245,197,66,.5);border-radius:999px;padding:1px 9px;font-weight:600}
+.book{background:rgba(111,207,151,.14);color:#8fe0b3;border:1px solid rgba(111,207,151,.5);border-radius:999px;padding:1px 9px;font-weight:600}
+.modes{display:flex;gap:6px;background:rgba(0,0,0,.3);padding:4px;border-radius:12px}
+.modes button{all:unset;cursor:pointer;padding:7px 16px;border-radius:9px;font-weight:700;font-size:13px}
+.modes button[aria-pressed=true]{background:#fff;color:#111}
+.parlay{display:flex;flex-direction:column;gap:14px}
+.parlay-form{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+.field input,.field select{background:var(--panel);border:1px solid var(--line);border-radius:8px;color:var(--text);
+  padding:8px 10px;font-size:15px;font-family:inherit}
+.field input{width:110px}
+.parlay-form button{all:unset;cursor:pointer;background:var(--gold);color:#1a1408;font-weight:800;
+  padding:9px 20px;border-radius:9px}
+.plays{display:flex;flex-direction:column;gap:12px}
+.play{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--panel)}
+.play h3{font-size:20px}
+.play .legrow{display:flex;justify-content:space-between;gap:8px;font-size:14px;color:#ddd6e2;padding:4px 0;border-top:1px solid var(--line)}
+.play .legrow:first-of-type{border-top:none;margin-top:6px}
 .right{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:6px;padding:10px 14px}
 .games{font-size:clamp(16px,3.4vw,20px);font-variant-numeric:tabular-nums;white-space:nowrap}
 .near .games{color:#cfc8d4}
@@ -63,21 +80,43 @@ footer{margin-top:28px;color:var(--muted);font-size:12px;line-height:1.6}
       <button data-league="nba" aria-pressed="true">NBA</button>
       <button data-league="nfl" aria-pressed="false">NFL</button>
     </div>
+    <div class="modes" role="group" aria-label="Mode">
+      <button data-mode="streaks" aria-pressed="true">Streaks</button>
+      <button data-mode="parlay" aria-pressed="false">Parlay</button>
+    </div>
     <div class="updated" id="updated"></div>
   </header>
-  <h1 id="title">100% Streaks</h1>
-  <div class="date" id="date"></div>
-  <nav class="stats" id="stats" aria-label="Stat"></nav>
-  <div class="toolbar">
-    <label class="toggle"><input type="checkbox" id="prefOnly"> Preferable matchups only</label>
-    <span class="legend"><b>★</b> soft defense, weaker opponent, or player in form</span>
+  <div id="streaksView">
+    <h1 id="title">100% Streaks</h1>
+    <div class="date" id="date"></div>
+    <nav class="stats" id="stats" aria-label="Stat"></nav>
+    <div class="toolbar">
+      <label class="toggle"><input type="checkbox" id="prefOnly"> Preferable matchups only</label>
+      <span class="legend"><b>★</b> soft defense, weaker opponent, or player in form</span>
+    </div>
+    <main class="rows" id="rows"></main>
   </div>
-  <main class="rows" id="rows"></main>
+  <div id="parlayView" class="parlay" style="display:none">
+    <h1>Parlay Builder</h1>
+    <div class="date">Combines today's sportsbook-matched picks to hit a target payout.</div>
+    <div class="parlay-form">
+      <div class="field"><label for="targetOdds">Target odds</label>
+        <input id="targetOdds" type="text" placeholder="+400" value="+400"></div>
+      <div class="field"><label for="legCount">Legs</label>
+        <select id="legCount">
+          <option value="">Any (2-6)</option>
+          <option>2</option><option>3</option><option>4</option><option>5</option><option>6</option>
+        </select></div>
+      <button id="buildParlay">Build</button>
+    </div>
+    <div class="plays" id="parlayResults"></div>
+  </div>
   <footer>Streaks count consecutive recent games played at or above the line (one-miss runs shown as e.g. 10/11).
-    Bars show the last 10 games, newest on the right. Data: ESPN box scores. Not betting advice.</footer>
+    Bars show the last 10 games, newest on the right. Sportsbook lines (<span class="book" style="padding:0 6px">book</span> chip)
+    refresh once a day. Data: ESPN box scores and The Odds API. Not betting advice.</footer>
 </div></div>
 <script>
-const state = { league: "nba", stat: null, prefOnly: false, data: {} };
+const state = { league: "nba", stat: null, prefOnly: false, mode: "streaks", data: {} };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const rgb = h => { h = (h || "333333").replace("#", ""); if (h.length !== 6) h = "333333";
@@ -85,7 +124,7 @@ const rgb = h => { h = (h || "333333").replace("#", ""); if (h.length !== 6) h =
 
 try { Object.assign(state, JSON.parse(localStorage.getItem("streaks-ui") || "{}"), { data: {} }); } catch {}
 const save = () => { try { localStorage.setItem("streaks-ui",
-  JSON.stringify({ league: state.league, stat: state.stat, prefOnly: state.prefOnly })); } catch {} };
+  JSON.stringify({ league: state.league, stat: state.stat, prefOnly: state.prefOnly, mode: state.mode })); } catch {} };
 
 async function load(league) {
   if (state.data[league]) return state.data[league];
@@ -110,7 +149,19 @@ function spark(r) {
     `<i class="${v >= r.threshold ? "" : "miss"}" style="height:${Math.max(3, v / max * 22)}px"></i>`).join("") + "</div>";
 }
 
+function bookChip(r) {
+  const b = r.book;
+  if (!b || b.over_price == null) return "";
+  const rate = b.games ? ` ${b.hits}/${b.games}` : "";
+  return `<span class="book" title="${esc(b.bookmaker)}">${b.point}+ O ${b.over_price > 0 ? "+" : ""}${b.over_price}${rate}</span>`;
+}
+
 function render() {
+  renderStreaks();
+  if (state.mode === "parlay") renderParlay();
+}
+
+function renderStreaks() {
   for (const b of document.querySelectorAll(".leagues button")) b.setAttribute("aria-pressed", b.dataset.league === state.league);
   $("prefOnly").checked = state.prefOnly;
   const d = state.data[state.league];
@@ -139,7 +190,7 @@ function render() {
     const t = team(r.team), opp = r.opponent ? team(r.opponent) : null;
     const logo = t.logo ? `<img src="${esc(t.logo)}" alt="${esc(t.abbr)}" loading="lazy">` : `<span>${esc(t.abbr)}</span>`;
     const meta = [opp ? `${r.home ? "vs" : "@"} ${esc(opp.abbr)}` : "",
-      ...r.flags.map(f => `<span class="chip">${esc(f.text)}</span>`)].filter(Boolean).join("");
+      ...r.flags.map(f => `<span class="chip">${esc(f.text)}</span>`), bookChip(r)].filter(Boolean).join("");
     return `<article class="row${r.perfect ? "" : " near"}${r.preferable ? " pref" : ""}" style="--rgb:${rgb(t.color)}">
       <div class="logo" style="background:#${esc(t.color)}">${logo}</div>
       <div class="body"><div class="name">${r.preferable ? '<span class="star">★</span>' : ""}${esc(r.player.short)} : ${esc(r.threshold_label)} ${esc(card.label)}</div>
@@ -151,19 +202,126 @@ function render() {
 async function show(league) {
   state.league = league; save(); render();
   try { await load(league); }
-  catch (e) { $("rows").innerHTML = `<div class="empty">${esc(e.message)}</div>`; $("stats").innerHTML = ""; return; }
+  catch (e) {
+    $("rows").innerHTML = `<div class="empty">${esc(e.message)}</div>`; $("stats").innerHTML = "";
+    $("parlayResults").innerHTML = `<div class="empty">${esc(e.message)}</div>`;
+    return;
+  }
   if (state.league === league) render();
+}
+
+// ------------------------------------------------------------ parlay builder
+// Mirrors streaks/parlay.py: American<->decimal conversion and a closest-to-
+// target combination search over sportsbook-matched legs. Pure client-side -
+// no server, just whatever's already in state.data[league].
+
+const americanToDecimal = price => price > 0 ? 1 + price / 100 : 1 + 100 / Math.abs(price);
+const decimalToAmerican = d => d >= 2 ? Math.round((d - 1) * 100) : Math.round(-100 / (d - 1));
+
+function parseAmerican(s) {
+  s = (s || "").trim();
+  if (!/^[+-]\d+$/.test(s)) throw new Error("odds must look like +400 or -150");
+  return parseInt(s, 10);
+}
+
+function legsFromData(d) {
+  const teams = d.teams || {};
+  const seen = new Set(), legs = [];
+  for (const card of d.stats || []) {
+    for (const r of card.rows) {
+      const b = r.book;
+      if (!b || b.over_price == null) continue;
+      const key = r.player.id + "|" + card.key;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      legs.push({
+        player: r.player.short, team: (teams[r.team] || {}).abbr || "",
+        statLabel: card.label, point: b.point, price: b.over_price,
+        hits: b.hits, games: b.games,
+        confidence: b.games ? b.hits / b.games : 0.5,
+      });
+    }
+  }
+  return legs;
+}
+
+function* combinations(arr, k, start = 0, chosen = []) {
+  if (chosen.length === k) { yield chosen; return; }
+  for (let i = start; i <= arr.length - (k - chosen.length); i++) {
+    yield* combinations(arr, k, i + 1, [...chosen, arr[i]]);
+  }
+}
+
+function bestParlays(legs, targetPrice, numLegs, count = 3, poolSize = 25) {
+  const pool = [...legs].sort((a, b) => b.confidence - a.confidence).slice(0, poolSize);
+  const targetLog = Math.log(americanToDecimal(targetPrice));
+  const legCounts = numLegs ? [numLegs] : [2, 3, 4, 5, 6];
+  const scored = [];
+  for (const k of legCounts) {
+    if (k < 1 || k > pool.length) continue;
+    for (const combo of combinations(pool, k)) {
+      if (new Set(combo.map(l => l.player)).size !== k) continue; // one leg per player
+      const decimal = combo.reduce((p, l) => p * americanToDecimal(l.price), 1);
+      const confidence = combo.reduce((p, l) => p * l.confidence, 1);
+      const dist = Math.abs(Math.log(decimal) - targetLog);
+      scored.push({ dist, confidence, decimal, legs: combo });
+    }
+  }
+  scored.sort((a, b) => a.dist - b.dist || b.confidence - a.confidence);
+  return scored.slice(0, count);
+}
+
+function renderParlay() {
+  const d = state.data[state.league];
+  const box = $("parlayResults");
+  if (!d) { box.innerHTML = `<div class="empty">Loading…</div>`; return; }
+  const legs = legsFromData(d);
+  if (!legs.length) {
+    box.innerHTML = `<div class="empty">No sportsbook-matched picks yet for ${esc(d.league_name || state.league.toUpperCase())}. Lines refresh once a day.</div>`;
+    return;
+  }
+  let target;
+  try { target = parseAmerican($("targetOdds").value); }
+  catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  const legCount = $("legCount").value ? parseInt($("legCount").value, 10) : null;
+  const plays = bestParlays(legs, target, legCount);
+  if (!plays.length) { box.innerHTML = `<div class="empty">No combination found - try a different leg count.</div>`; return; }
+
+  box.innerHTML = plays.map(p => {
+    const american = decimalToAmerican(p.decimal);
+    const legRows = p.legs.map(l => {
+      const rate = l.games ? ` (${l.hits}/${l.games})` : "";
+      return `<div class="legrow"><span>${esc(l.player)} (${esc(l.team)}) ${l.point}+ ${esc(l.statLabel)}${rate}</span>
+        <span>${l.price > 0 ? "+" : ""}${l.price}</span></div>`;
+    }).join("");
+    return `<article class="play"><h3>${american > 0 ? "+" : ""}${american}
+      <span style="font-size:13px;color:var(--muted);font-weight:600"> · ${p.legs.length} legs · implied win ~${(p.confidence * 100).toFixed(1)}%</span></h3>
+      ${legRows}</article>`;
+  }).join("");
+}
+
+function setMode(mode) {
+  state.mode = mode; save();
+  for (const b of document.querySelectorAll(".modes button")) b.setAttribute("aria-pressed", b.dataset.mode === mode);
+  $("streaksView").style.display = mode === "streaks" ? "" : "none";
+  $("parlayView").style.display = mode === "parlay" ? "" : "none";
+  if (mode === "parlay") renderParlay();
 }
 
 document.querySelector(".leagues").addEventListener("click", e => {
   const b = e.target.closest("button[data-league]"); if (b) { state.stat = null; show(b.dataset.league); }
 });
+document.querySelector(".modes").addEventListener("click", e => {
+  const b = e.target.closest("button[data-mode]"); if (b) setMode(b.dataset.mode);
+});
 $("stats").addEventListener("click", e => {
   const b = e.target.closest("button[data-stat]"); if (b) { state.stat = b.dataset.stat; save(); render(); }
 });
 $("prefOnly").addEventListener("change", e => { state.prefOnly = e.target.checked; save(); render(); });
+$("buildParlay").addEventListener("click", renderParlay);
 setInterval(() => { delete state.data[state.league]; show(state.league); }, 5 * 60 * 1000);
 show(state.league);
+setMode(state.mode);
 </script>
 </body>
 </html>
