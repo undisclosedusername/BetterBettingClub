@@ -156,6 +156,10 @@ def test_end_to_end_offline(tmp_path):
 from streaks.engine import Streak
 from streaks.espn import Matchup, Slate, Team, TeamGame
 from streaks.matchup import defense_table, evaluate, workload_share
+from streaks.weather import WeatherReading
+
+RUSH_YDS = next(s for s in NFL_STATS if s.key == "rush_yds")
+PASS_YDS = next(s for s in NFL_STATS if s.key == "pass_yds")
 
 
 def _slate(rec_me=(5, 5, 0), rec_opp=(5, 5, 0)):
@@ -230,6 +234,26 @@ def test_volume_flag_skipped_below_threshold():
     st = Streak(mk_player("REB", [8] * 10), REB, 6, 10, 10)
     idx = _team_index({str(i): 40 for i in range(10)})  # only 20% share
     assert evaluate(st, _slate(), {}, TEAMS, Settings(), team_index=idx) == []
+
+
+def test_weather_flag_fires_on_rain_or_wind():
+    st = Streak(mk_player("rushing.YDS", [60] * 10), RUSH_YDS, 40, 10, 10)
+    rain = evaluate(st, _slate(), {}, TEAMS, Settings(), event_weather={"e": WeatherReading(70, 5)})
+    assert [f.kind for f in rain] == ["weather"] and "70% rain" in rain[0].text
+
+    wind = evaluate(st, _slate(), {}, TEAMS, Settings(), event_weather={"e": WeatherReading(10, 28)})
+    assert [f.kind for f in wind] == ["weather"] and "28mph wind" in wind[0].text
+
+
+def test_weather_flag_skipped_below_threshold_missing_or_non_rushing_stat():
+    st = Streak(mk_player("rushing.YDS", [60] * 10), RUSH_YDS, 40, 10, 10)
+    assert evaluate(st, _slate(), {}, TEAMS, Settings(), event_weather={"e": WeatherReading(20, 8)}) == []
+    assert evaluate(st, _slate(), {}, TEAMS, Settings(), event_weather={"e": None}) == []
+    assert evaluate(st, _slate(), {}, TEAMS, Settings()) == []   # no event_weather at all
+
+    pass_st = Streak(mk_player("passing.YDS", [250] * 10), PASS_YDS, 200, 10, 10)
+    assert evaluate(pass_st, _slate(), {}, TEAMS, Settings(),
+                    event_weather={"e": WeatherReading(90, 30)}) == []
 
 
 def test_preferable_rows_sort_first(tmp_path):

@@ -25,6 +25,7 @@ from .engine import Settings
 from .espn import ET, EspnClient
 from .odds import OddsClient, attach_lines
 from .pipeline import run
+from .weather import WeatherClient
 
 
 def _same(path: Path, data: dict) -> bool:
@@ -78,6 +79,8 @@ def main(argv=None) -> int:
                     help="attach sportsbook lines for today's top picks (needs ODDS_API_KEY)")
     ap.add_argument("--odds-top-n", type=int, default=12,
                     help="top N rows per stat card to fetch a sportsbook line for")
+    ap.add_argument("--with-weather", action="store_true",
+                    help="flag rushing props helped by rain/wind at kickoff (free, no API key)")
     a = ap.parse_args(argv)
 
     odds_key = os.environ.get("ODDS_API_KEY")
@@ -85,6 +88,7 @@ def main(argv=None) -> int:
         print("--with-odds given but ODDS_API_KEY is not set; skipping odds", file=sys.stderr)
         a.with_odds = False
     odds_client = OddsClient(odds_key, a.cache / "odds") if a.with_odds else None
+    weather_client = WeatherClient(a.cache / "weather") if a.with_weather and not a.offline else None
 
     a.out.mkdir(parents=True, exist_ok=True)
     target = a.date or datetime.now(ET).date()
@@ -96,11 +100,12 @@ def main(argv=None) -> int:
         try:
             client = EspnClient(league, a.cache, offline=a.offline)
             if odds_client:
-                result, players = run(league, client, target, Settings(), want_players=True)
+                result, players = run(league, client, target, Settings(), want_players=True,
+                                      weather_client=weather_client)
                 attach_lines(result, odds_client, league.key, players,
                             {s.key: s for s in league.stats}, top_n=a.odds_top_n)
             else:
-                result = run(league, client, target, Settings())
+                result = run(league, client, target, Settings(), weather_client=weather_client)
         except Exception:
             traceback.print_exc()
             failures += 1

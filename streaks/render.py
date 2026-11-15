@@ -86,8 +86,8 @@ def card_html(result: dict, card: dict) -> str:
     if not rows:
         rows.append('<div class="row"><div class="body"><div class="name">No qualifying streaks</div></div></div>')
     legend = ('<div class="legend"><b>★</b> two or more signals line up — soft opponent defense, '
-              'weaker opponent, heavy team workload share, or player in form</div>'
-              ) if any(r["preferable"] for r in rows_data) else ""
+              'weaker opponent, heavy team workload share, rain/wind helping the run game, '
+              'or player in form</div>') if any(r["preferable"] for r in rows_data) else ""
     hero_img = f'<img class="hero" src="{esc(hero)}" alt="">' if hero else ""
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <title>{esc(result["league_name"])} {esc(card["title"])} Streaks</title>

@@ -18,9 +18,13 @@ A streak is *preferable* when at least one flag fires:
             ball to this guy" - so their volume holds up even on an average
             matchup. Only fires for stats with a meaningful team-share concept
             (see StatDef.volume_threshold).
+  weather   Rain or wind at kickoff favors a run-heavier game script. Only
+            fires for rushing stats (see StatDef.weather_eligible), and only
+            for outdoor stadiums (see weather.py).
 
-Rows with more flags sort above rows with fewer. Everything is computed from data
-we already load, so no extra API calls are needed.
+Rows with more flags sort above rows with fewer. Soft_d, hot, weak_opp and
+volume are computed entirely from data we already load; weather is the one
+flag that needs an extra (free, keyless) API call - see weather.py.
 """
 from __future__ import annotations
 
@@ -31,6 +35,7 @@ from statistics import mean
 from .config import StatDef
 from .engine import Settings, Streak
 from .espn import Player, Slate, Team, TeamGame
+from .weather import WeatherReading
 
 
 @dataclass
@@ -104,7 +109,8 @@ def form(streak: Streak) -> tuple[float | None, float | None]:
 
 def evaluate(streak: Streak, slate: Slate | None, defense: dict[str, DefenseRow],
              teams: dict[str, Team], s: Settings,
-             team_index: dict[str, dict[str, TeamGame]] | None = None) -> list[Flag]:
+             team_index: dict[str, dict[str, TeamGame]] | None = None,
+             event_weather: dict[str, WeatherReading | None] | None = None) -> list[Flag]:
     flags: list[Flag] = []
     m = slate.matchups.get(streak.player.team_id) if slate else None
 
@@ -135,4 +141,14 @@ def evaluate(streak: Streak, slate: Slate | None, defense: dict[str, DefenseRow]
         share = workload_share(streak.player, streak.stat, team_index, s.volume_window)
         if share is not None and share >= thresh:
             flags.append(Flag("volume", f"{share * 100:.0f}% of team {streak.stat.label} (L{s.volume_window})"))
+
+    if streak.stat.weather_eligible and m and event_weather is not None:
+        wx = event_weather.get(m.event_id)
+        if wx and (wx.precip_prob >= s.rain_precip_prob or wx.wind_mph >= s.rain_wind_mph):
+            bits = []
+            if wx.precip_prob >= s.rain_precip_prob:
+                bits.append(f"{wx.precip_prob:.0f}% rain")
+            if wx.wind_mph >= s.rain_wind_mph:
+                bits.append(f"{wx.wind_mph:.0f}mph wind")
+            flags.append(Flag("weather", " + ".join(bits) + " at kickoff"))
     return flags

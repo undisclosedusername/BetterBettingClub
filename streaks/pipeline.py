@@ -11,6 +11,7 @@ from .config import League, StatDef
 from .engine import Settings, Streak, find_streaks
 from .espn import EspnClient, Slate, Team, load_history, slate as load_slate
 from .matchup import defense_table, evaluate, team_event_index
+from .weather import WeatherClient, WeatherReading, game_weather
 
 SCHEMA_VERSION = 1
 
@@ -44,10 +45,29 @@ def _row(st: Streak, flags, sl: Slate | None, teams: dict[str, Team]) -> dict:
     }
 
 
+def _event_weather(sl: Slate, teams: dict[str, Team], weather_client: WeatherClient | None,
+                   log) -> dict[str, WeatherReading | None]:
+    if not weather_client:
+        return {}
+    out: dict[str, WeatherReading | None] = {}
+    for m in sl.matchups.values():
+        if not m.home or m.event_id in out:
+            continue
+        home = teams.get(m.team_id)
+        if not home:
+            continue
+        try:
+            out[m.event_id] = game_weather(weather_client, home.abbr, m.start)
+        except Exception as e:
+            log(f"  weather: {home.abbr} lookup failed ({e})")
+    return out
+
+
 def run(league: League, client: EspnClient, target: date, settings: Settings,
         stats: list[StatDef] | None = None, since: date | None = None,
         lookback_days: int | None = None, slate_days: int | None = None,
-        all_teams: bool = False, progress=None, log=print, want_players: bool = False):
+        all_teams: bool = False, progress=None, log=print, want_players: bool = False,
+        weather_client: WeatherClient | None = None):
     stats = stats or league.stats
     teams: dict[str, Team] = {}
     sl = load_slate(client, target, slate_days or league.slate_days, teams)
@@ -64,10 +84,11 @@ def run(league: League, client: EspnClient, target: date, settings: Settings,
 
     team_filter = None if all_teams else sl.team_ids
     team_index = team_event_index(team_log)
+    event_weather = _event_weather(sl, teams, weather_client, log)
     cards = []
     for stat in stats:
         defense = defense_table(team_log, stat, settings.def_window)
-        scored = [(st, evaluate(st, sl, defense, teams, settings, team_index))
+        scored = [(st, evaluate(st, sl, defense, teams, settings, team_index, event_weather))
                   for st in find_streaks(players, stat, settings, team_filter)]
         if settings.preferable_first:
             # stable sort keeps the streak ranking inside each group

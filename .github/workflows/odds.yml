@@ -38,7 +38,7 @@ jobs:
           key: streaks-${{ github.run_id }}
           restore-keys: streaks-
 
-      - run: python -m streaks.build --out public/data --with-odds --odds-top-n 12
+      - run: python -m streaks.build --out public/data --with-odds --odds-top-n 12 --with-weather
         env:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
 

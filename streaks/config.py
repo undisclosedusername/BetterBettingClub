@@ -26,6 +26,9 @@ class StatDef:
     # None means the stat doesn't have a meaningful team-share concept (e.g. a
     # QB's own passing yards, or defensive counting stats).
     volume_threshold: float | None = None
+    # Does bad weather (rain/wind) at kickoff make this stat MORE likely, via a
+    # run-heavier game script? Only rushing stats qualify (see weather.py).
+    weather_eligible: bool = False
 
 
 def _f(*keys: str) -> Callable[[Line], float]:
@@ -62,16 +65,17 @@ NFL_STATS: list[StatDef] = [
     StatDef("pass_cmp", "Completions", "Completions", (12, 15, 18, 20, 22, 25, 28, 30, 35),
             _f("passing.CMP"), min_line=15, min_avg=12),
     StatDef("rush_yds", "Rush Yds", "Rushing Yards", (15, 25, 40, 50, 60, 70, 80, 90, 100, 125, 150),
-            _f("rushing.YDS"), min_line=25, min_avg=20, volume_threshold=0.55),
+            _f("rushing.YDS"), min_line=25, min_avg=20, volume_threshold=0.55, weather_eligible=True),
     StatDef("rush_att", "Rush Att", "Rush Attempts", (5, 8, 10, 12, 15, 18, 20, 22, 25),
-            _f("rushing.CAR"), min_line=8, min_avg=6, volume_threshold=0.55),
+            _f("rushing.CAR"), min_line=8, min_avg=6, volume_threshold=0.55, weather_eligible=True),
     StatDef("rec_yds", "Rec Yds", "Receiving Yards", (15, 25, 40, 50, 60, 70, 80, 90, 100, 125, 150),
             _f("receiving.YDS"), min_line=25, min_avg=20, volume_threshold=0.28),
     StatDef("rec", "Receptions", "Receptions", (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12),
             _f("receiving.REC"), min_line=2, min_avg=2, volume_threshold=0.24),
     StatDef("rush_rec_yds", "Rush+Rec Yds", "Rush + Rec Yards",
             (25, 40, 50, 60, 75, 90, 100, 125, 150, 175),
-            _f("rushing.YDS", "receiving.YDS"), min_line=40, min_avg=35, volume_threshold=0.45),
+            _f("rushing.YDS", "receiving.YDS"), min_line=40, min_avg=35, volume_threshold=0.45,
+            weather_eligible=True),
     StatDef("anytime_td", "Anytime TD", "Anytime TD", (1, 2, 3),
             _f("rushing.TD", "receiving.TD"), min_line=1, min_avg=0.3),
     StatDef("int", "Interceptions", "Defensive INT", (1,),

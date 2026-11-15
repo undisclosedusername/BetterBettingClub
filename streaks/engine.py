@@ -57,6 +57,8 @@ class Settings:
     weak_opp_cap: float = 0.40  # ...and below this win% outright
     min_record_games: int = 4   # need this many games played before trusting records
     volume_window: int = 6      # recent games used for the team-share ("volume") check
+    rain_precip_prob: float = 55   # % chance of precipitation at kickoff to flag
+    rain_wind_mph: float = 20      # ...or sustained wind at kickoff to flag
     preferable_first: bool = True
 
 
