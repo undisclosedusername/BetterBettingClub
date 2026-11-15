@@ -100,3 +100,32 @@ def test_attach_lines_end_to_end():
     book = result["stats"][0]["rows"][0]["book"]
     assert book == {"bookmaker": "fanduel", "market": "player_points", "point": 24.5,
                     "over_price": -130, "under_price": 105, "hits": 4, "games": 5}
+
+
+def test_attach_lines_skips_prohibitively_short_prices():
+    lopsided_odds = {"bookmakers": [{"key": "fanduel", "markets": [
+        {"key": "player_points", "outcomes": [
+            {"name": "Over", "description": "Nikola Jokic", "price": -900, "point": 10.5},
+            {"name": "Under", "description": "Nikola Jokic", "price": 500, "point": 10.5},
+        ]},
+    ]}]}
+    result = {
+        "teams": {"4": {"name": "Denver Nuggets", "abbr": "DEN"}, "9": {"name": "Memphis Grizzlies", "abbr": "MEM"}},
+        "games": [{"id": "e1", "home": "4", "away": "9"}],
+        "stats": [{
+            "key": "pts", "label": "Points",
+            "rows": [{"player": {"id": "p1", "name": "Nikola Jokic", "short": "N. Jokic"},
+                      "team": "4", "opponent": "9", "home": True,
+                      "threshold": 12, "hits": 11, "games": 11}],
+        }],
+    }
+    players = {"p1": Player("p1", "Nikola Jokic", "N. Jokic",
+                            games=[_game(i, v) for i, v in enumerate([30, 28, 10, 26, 25])])}
+    stats_by_key = {"pts": type("S", (), {"extract": staticmethod(lambda line: line["PTS"])})()}
+    events = [{"id": "e1", "home_team": "Denver Nuggets", "away_team": "Memphis Grizzlies"}]
+    client = FakeOddsClient(events, {"e1": lopsided_odds})
+
+    stats = attach_lines(result, client, "nba", players, stats_by_key, log=lambda *a: None)
+
+    assert stats == {"matched": 0, "checked": 1}
+    assert "book" not in result["stats"][0]["rows"][0]

@@ -24,6 +24,11 @@ BASE = "https://api.the-odds-api.com/v4"
 
 SPORT_KEYS = {"nba": "basketball_nba", "nfl": "americanfootball_nfl"}
 
+# A line priced shorter than this (e.g. -900) is a near-certainty: it adds almost
+# nothing to a parlay's payout, so it's not worth surfacing or spending a parlay
+# leg slot on.
+MIN_OVER_PRICE = -800
+
 # stat key -> (market key, kind). kind "ou" = Over/Under with a point line,
 # "yes" = binary yes/no market (only threshold==1 can be matched against it).
 MARKETS: dict[str, dict[str, tuple[str, str]]] = {
@@ -220,7 +225,7 @@ def attach_lines(result: dict, client: OddsClient, league_key: str,
         if not ev or ev["id"] not in odds_by_event:
             continue
         line = best_line(odds_by_event[ev["id"]], market_key, row["player"]["name"], kind)
-        if not line:
+        if not line or line.over_price < MIN_OVER_PRICE:
             continue
         player = players.get(row["player"]["id"])
         stat = stats_by_key.get(card["key"])

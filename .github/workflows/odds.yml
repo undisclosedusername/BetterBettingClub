@@ -1,14 +1,13 @@
-# Fetches sportsbook player-prop lines once a day and attaches them to that day's
-# top streak picks, committing the result back to main (the "site" workflow then
-# redeploys Pages on that push). Kept separate from site.yml's ~30min rebuild
-# cadence on purpose: The Odds API's free tier is 500 credits/month, so this only
-# runs once a day. One-time setup: repo Settings -> Secrets -> Actions ->
-# ODDS_API_KEY (get a free key at https://the-odds-api.com).
+# Fetches sportsbook player-prop lines and attaches them to that day's top streak
+# picks, committing the result back to main (the "site" workflow then redeploys
+# Pages on that push). Manual-trigger only, on purpose: a single run can use 50-100+
+# of The Odds API's free 500 credits/month, so this is NOT on a schedule - run it
+# (Actions -> odds -> Run workflow) whenever you want fresh lines. One-time setup:
+# repo Settings -> Secrets -> Actions -> ODDS_API_KEY (get a free key at
+# https://the-odds-api.com).
 name: odds
 
 on:
-  schedule:
-    - cron: "0 11 * * *"   # ~6-7am ET, before most slates lock in their first lines
   workflow_dispatch:
 
 permissions:
