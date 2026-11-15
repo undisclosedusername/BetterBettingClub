@@ -154,7 +154,8 @@ def test_end_to_end_offline(tmp_path):
 # ---------------------------------------------------------------- matchups
 
 from streaks.engine import Streak
-from streaks.espn import Matchup, Slate, Team, TeamGame
+from streaks.espn import Matchup, Slate, Team, TeamGame, is_upcoming
+from streaks.espn import slate as load_slate
 from streaks.matchup import defense_table, evaluate, workload_share
 from streaks.weather import WeatherReading
 
@@ -254,6 +255,35 @@ def test_weather_flag_skipped_below_threshold_missing_or_non_rushing_stat():
     pass_st = Streak(mk_player("passing.YDS", [250] * 10), PASS_YDS, 200, 10, 10)
     assert evaluate(pass_st, _slate(), {}, TEAMS, Settings(),
                     event_weather={"e": WeatherReading(90, 30)}) == []
+
+
+# ------------------------------------------------------------- game status/venue
+
+def test_is_upcoming_excludes_live_and_completed_games():
+    assert is_upcoming({"status": {"type": {"state": "pre"}}}) is True
+    assert is_upcoming({"status": {"type": {"state": "in", "completed": False}}}) is False
+    assert is_upcoming({"status": {"type": {"state": "post", "completed": True}}}) is False
+    assert is_upcoming({"status": {"type": {}}}) is True   # no state reported -> assume upcoming
+
+
+def test_slate_drops_games_already_in_progress_and_keeps_venue(tmp_path):
+    client = EspnClient(LEAGUES["nba"], tmp_path, offline=True)
+    live = {"id": "e1", "date": "2026-11-15T18:00Z", "status": {"type": {"state": "in", "completed": False}},
+            "competitions": [{"competitors": [
+                {"homeAway": "home", "team": {"id": "1", "abbreviation": "AAA"}},
+                {"homeAway": "away", "team": {"id": "2", "abbreviation": "BBB"}}],
+                "venue": {"fullName": "Test Arena", "address": {"city": "Testville", "state": "TS"}}}]}
+    upcoming = {"id": "e2", "date": "2026-11-15T23:00Z", "status": {"type": {"state": "pre"}},
+                "competitions": [{"competitors": [
+                    {"homeAway": "home", "team": {"id": "3", "abbreviation": "CCC"}},
+                    {"homeAway": "away", "team": {"id": "4", "abbreviation": "DDD"}}],
+                    "venue": {"fullName": "Other Arena", "address": {"city": "Elsewhere", "state": "ES"}}}]}
+    client._cache_path("scoreboard", {"dates": "20261115", "limit": 500}) \
+        .write_text(json.dumps({"events": [live, upcoming]}))
+    sl = load_slate(client, date(2026, 11, 15), 1, {})
+    assert sl.team_ids == {"3", "4"}   # the live game's teams ("1", "2") are gone
+    m = sl.matchups["3"]
+    assert m.venue == "Other Arena" and m.location == "Elsewhere, ES"
 
 
 def test_preferable_rows_sort_first(tmp_path):

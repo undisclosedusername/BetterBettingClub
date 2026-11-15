@@ -141,6 +141,14 @@ def is_completed(event: dict) -> bool:
     return bool(st.get("type", {}).get("completed"))
 
 
+def is_upcoming(event: dict) -> bool:
+    """Hasn't tipped off/kicked off yet. Unlike is_completed (only true once a game
+    is over), this also excludes a game that's live right now - once a game starts,
+    sportsbooks pull the prop, so it has no business staying on the slate."""
+    st = event.get("status") or event.get("competitions", [{}])[0].get("status", {})
+    return st.get("type", {}).get("state", "pre") == "pre"
+
+
 def event_date_et(event: dict) -> date:
     dt = datetime.fromisoformat(event["date"].replace("Z", "+00:00"))
     if dt.tzinfo is None:
@@ -296,6 +304,8 @@ class Matchup:
     opponent_id: str
     home: bool
     start: str          # ISO kickoff / tip time (UTC)
+    venue: str = ""      # arena/stadium name
+    location: str = ""   # "City, ST"
 
 
 @dataclass
@@ -329,28 +339,39 @@ def team_from_competitor(c: dict) -> Team:
                 color=t.get("color") or "333333")
 
 
-def slate(client: EspnClient, d: date, days: int = 1, teams: dict[str, Team] | None = None) -> Slate:
-    """Games from d through d+days-1 (unfinished ones only), who plays whom, and records.
+def _venue(event: dict) -> tuple[str, str]:
+    v = event.get("competitions", [{}])[0].get("venue") or {}
+    addr = v.get("address") or {}
+    return v.get("fullName", ""), ", ".join(filter(None, [addr.get("city"), addr.get("state")]))
 
-    If a team plays twice in the window, its first game is used.
+
+def slate(client: EspnClient, d: date, days: int = 1, teams: dict[str, Team] | None = None) -> Slate:
+    """Games from d through d+days-1 that haven't tipped off/kicked off yet, who
+    plays whom, and records.
+
+    If a team plays twice in the window, its first game is used. A game that's
+    live or finished drops off the slate the next time this runs - sportsbooks
+    pull the prop the moment a game starts, so there's no point still showing it.
     """
     dates = [d + timedelta(days=i) for i in range(days)]
     events, matchups, records = [], {}, {}
     for day in dates:
         for e in client.scoreboard(day, cache=client.offline):
-            if is_completed(e):
+            if not is_upcoming(e):
                 continue
             comps = e.get("competitions", [{}])[0].get("competitors", [])
             if len(comps) != 2:
                 continue
             events.append(e)
+            venue, location = _venue(e)
             for c, o in ((comps[0], comps[1]), (comps[1], comps[0])):
                 tid = c["team"]["id"]
                 if teams is not None and tid not in teams:
                     teams[tid] = team_from_competitor(c)
                 if tid in matchups:
                     continue
-                matchups[tid] = Matchup(e["id"], tid, o["team"]["id"], c.get("homeAway") == "home", e["date"])
+                matchups[tid] = Matchup(e["id"], tid, o["team"]["id"], c.get("homeAway") == "home", e["date"],
+                                        venue, location)
                 for r in c.get("records") or []:
                     if r.get("type") in (None, "total") or r.get("name") == "overall":
                         rec = parse_record(r.get("summary", ""))

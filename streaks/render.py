@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import html
 import os
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
+
+from .espn import ET
 
 
 CSS = """
@@ -47,6 +49,16 @@ def _rgb(hex_color: str) -> str:
     return ",".join(str(int(h[i:i + 2], 16)) for i in (0, 2, 4))
 
 
+def _kickoff_label(iso: str | None) -> str:
+    """"Sun 4:06 PM ET" - avoids strftime's %-I (not supported on Windows)."""
+    if not iso:
+        return ""
+    dt = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(ET)
+    hour12 = dt.hour % 12 or 12
+    ampm = "AM" if dt.hour < 12 else "PM"
+    return f"{dt:%a} {hour12}:{dt.minute:02d} {ampm} ET"
+
+
 def date_label(result: dict) -> str:
     dates = [date.fromisoformat(d) for d in result.get("slate_dates") or [result["date"]]]
     d0, d1 = dates[0], dates[-1]
@@ -72,7 +84,10 @@ def card_html(result: dict, card: dict) -> str:
                 else f'<span>{esc(t["abbr"])}</span>')
         meta = []
         if r.get("opponent"):
-            meta.append(f'{"vs" if r.get("home") else "@"} {esc(team(r["opponent"])["abbr"])}')
+            meta.append(f'<span>{"vs" if r.get("home") else "@"} {esc(team(r["opponent"])["abbr"])}</span>')
+        when_where = " · ".join(x for x in (_kickoff_label(r.get("start")), r.get("location")) if x)
+        if when_where:
+            meta.append(f'<span>{esc(when_where)}</span>')
         meta += [f'<span class="chip">{esc(f["text"])}</span>' for f in r["flags"]]
         cls = "row" + ("" if r["perfect"] else " near") + (" pref" if r["preferable"] else "")
         star = '<span class="star">★</span>' if r["preferable"] else ""

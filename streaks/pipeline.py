@@ -34,6 +34,8 @@ def _row(st: Streak, flags, sl: Slate | None, teams: dict[str, Team]) -> dict:
         "opponent": m.opponent_id if m else None,
         "home": m.home if m else None,
         "start": m.start if m else None,
+        "venue": m.venue if m else None,
+        "location": m.location if m else None,
         "threshold": st.threshold,
         "threshold_label": st.threshold_label,
         "hits": st.hits,
@@ -111,7 +113,8 @@ def _result(league, target, sl, teams, cards, settings) -> dict:
         "date": str(target),
         "slate_dates": [str(d) for d in sl.dates],
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "games": [{"id": m.event_id, "home": tid, "away": m.opponent_id, "start": m.start}
+        "games": [{"id": m.event_id, "home": tid, "away": m.opponent_id, "start": m.start,
+                  "venue": m.venue, "location": m.location}
                   for tid, m in sl.matchups.items() if m.home],
         "records": {tid: list(r) for tid, r in sl.records.items()},
         "teams": {tid: _team_json(t) for tid, t in teams.items()},

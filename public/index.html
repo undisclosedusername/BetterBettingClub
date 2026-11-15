@@ -141,6 +141,14 @@ function dateLabel(d) {
     : `${a.toLocaleDateString(undefined, short)} – ${b.toLocaleDateString(undefined, short)}`;
 }
 
+function fmtKickoff(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const day = d.toLocaleDateString("en-US", { weekday: "short", timeZone: "America/New_York" });
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+  return `${day} ${time} ET`;
+}
+
 function spark(r) {
   const vals = (r.recent || []).slice(0, 10).reverse();
   if (!vals.length) return "";
@@ -189,7 +197,9 @@ function renderStreaks() {
   $("rows").innerHTML = rows.map(r => {
     const t = team(r.team), opp = r.opponent ? team(r.opponent) : null;
     const logo = t.logo ? `<img src="${esc(t.logo)}" alt="${esc(t.abbr)}" loading="lazy">` : `<span>${esc(t.abbr)}</span>`;
-    const meta = [opp ? `${r.home ? "vs" : "@"} ${esc(opp.abbr)}` : "",
+    const whenWhere = [fmtKickoff(r.start), r.location].filter(Boolean).join(" · ");
+    const meta = [opp ? `<span>${r.home ? "vs" : "@"} ${esc(opp.abbr)}</span>` : "",
+      whenWhere ? `<span>${esc(whenWhere)}</span>` : "",
       ...r.flags.map(f => `<span class="chip">${esc(f.text)}</span>`), bookChip(r)].filter(Boolean).join("");
     return `<article class="row${r.perfect ? "" : " near"}${r.preferable ? " pref" : ""}" style="--rgb:${rgb(t.color)}">
       <div class="logo" style="background:#${esc(t.color)}">${logo}</div>
